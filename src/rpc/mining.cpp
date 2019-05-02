@@ -1141,15 +1141,21 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
     static unsigned nTransactionsUpdatedLast;
     static const CBlockIndex* pindexPrev = nullptr;
     static uint64_t nStart;
-    static CBlock* pblock = nullptr;
+    static std::map<CScriptID, CBlock*> curBlocks;
     static unsigned nExtraNonce = 0;
+    CBlock* pblock = nullptr;
 
     // Update block
     // Dogecoin: Never mine witness tx
     const bool fMineWitnessTx = false;
     {
     LOCK(cs_main);
-    if (pindexPrev != chainActive.Tip()
+    CScriptID scriptID (scriptPubKey);
+    auto iter = curBlocks.find(scriptID);
+    if (iter != curBlocks.end()) pblock = iter->second;
+
+    if (pblock == nullptr
+        || pindexPrev != chainActive.Tip()
         || (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast
             && GetTime() - nStart > 60))
     {
@@ -1158,7 +1164,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
             // Clear old blocks since they're obsolete now.
             mapNewBlock.clear();
             vNewBlockTemplate.clear();
-            pblock = nullptr;
+            curBlocks.clear();
         }
 
         // Create new block with nonce = 0 and extraNonce = 1
@@ -1178,6 +1184,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
         // Save
         pblock = &newBlock->block;
+        curBlocks[scriptID] = pblock;
         mapNewBlock[pblock->GetHash()] = pblock;
         vNewBlockTemplate.push_back(std::move(newBlock));
     }
